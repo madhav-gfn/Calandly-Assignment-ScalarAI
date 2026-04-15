@@ -1,0 +1,192 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+// ============================================================
+// Scheduling Platform — Prisma Schema
+// ============================================================
+
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ============================================================
+// USER
+// ============================================================
+
+model User {
+  id           String   @id @default(uuid())
+  name         String
+  email        String   @unique
+  passwordHash String   @map("password_hash")
+  timezone     String   @default("UTC")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  // Relations
+  eventTypes             EventType[]
+  availabilitySchedules  AvailabilitySchedule[]
+  hostedBookings         Booking[]              @relation("HostBookings")
+  inviteeBookings        Booking[]              @relation("InviteeBookings")
+
+  @@map("users")
+}
+
+// ============================================================
+// EVENT TYPE
+// ============================================================
+
+model EventType {
+  id                String   @id @default(uuid())
+  userId            String   @map("user_id")
+  title             String
+  slug              String
+  durationMinutes   Int      @map("duration_minutes")
+  description       String?
+  meetingMode       String   @default("google_meet") @map("meeting_mode")
+  bufferBeforeMin   Int      @default(0) @map("buffer_before_min")
+  bufferAfterMin    Int      @default(0) @map("buffer_after_min")
+  isActive          Boolean  @default(true) @map("is_active")
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  // Relations
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  bookings Booking[]
+
+  // slug must be unique per user — enforces /username/slug routing
+  @@unique([userId, slug])
+  @@map("event_types")
+}
+
+// ============================================================
+// AVAILABILITY SCHEDULE
+// ============================================================
+
+model AvailabilitySchedule {
+  id        String  @id @default(uuid())
+  userId    String  @map("user_id")
+  name      String
+  isDefault Boolean @default(false) @map("is_default")
+
+  // Relations
+  user      User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  rules     AvailabilityRule[]
+  overrides AvailabilityOverride[]
+
+  @@map("availability_schedules")
+}
+
+// ============================================================
+// AVAILABILITY RULE  (weekly recurring — Mon 09:00–17:00)
+// ============================================================
+
+model AvailabilityRule {
+  id         String @id @default(uuid())
+  scheduleId String @map("schedule_id")
+  dayOfWeek  Int    @map("day_of_week") // 0 = Sunday … 6 = Saturday
+  startTime  String @map("start_time")  // "09:00"
+  endTime    String @map("end_time")    // "17:00"
+
+  // Relations
+  schedule AvailabilitySchedule @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+
+  @@map("availability_rules")
+}
+
+// ============================================================
+// AVAILABILITY OVERRIDE  (date-specific exceptions)
+// ============================================================
+
+model AvailabilityOverride {
+  id           String   @id @default(uuid())
+  scheduleId   String   @map("schedule_id")
+  overrideDate DateTime @map("override_date") @db.Date
+  startTime    String?  @map("start_time")  // null when is_available = false
+  endTime      String?  @map("end_time")
+  isAvailable  Boolean  @default(false) @map("is_available")
+  note         String?
+
+  // Relations
+  schedule AvailabilitySchedule @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+
+  @@map("availability_overrides")
+}
+
+// ============================================================
+// BOOKING
+// ============================================================
+
+// meetingMode on booking overrides the event type default when present.
+// inviteeId is nullable — guest invitees (no account) use name + email only.
+
+model Booking {
+  id          String        @id @default(uuid())
+  eventTypeId String        @map("event_type_id")
+  hostId      String        @map("host_id")
+  inviteeId   String?       @map("invitee_id")  // null for guest bookings
+  inviteeName String        @map("invitee_name")
+  inviteeEmail String       @map("invitee_email")
+  startAt     DateTime      @map("start_at")
+  endAt       DateTime      @map("end_at")
+  status      BookingStatus @default(SCHEDULED)
+  meetingMode String?       @map("meeting_mode") // overrides event type if set
+  meetingLink String?       @map("meeting_link")
+  locationDetails String?   @map("location_details")
+  cancelledAt DateTime?     @map("cancelled_at")
+  rescheduledFromId String? @map("rescheduled_from_id") // self-FK for reschedule chain
+  createdAt   DateTime      @default(now()) @map("created_at")
+
+  // Relations
+  eventType         EventType         @relation(fields: [eventTypeId], references: [id])
+  host              User              @relation("HostBookings",    fields: [hostId],     references: [id])
+  invitee           User?             @relation("InviteeBookings", fields: [inviteeId],  references: [id])
+  rescheduledFrom   Booking?          @relation("RescheduleChain", fields: [rescheduledFromId], references: [id])
+  rescheduledTo     Booking[]         @relation("RescheduleChain")
+  questions         BookingQuestion[]
+
+  @@map("bookings")
+}
+
+enum BookingStatus {
+  SCHEDULED
+  CANCELLED
+  COMPLETED
+}
+
+// ============================================================
+// BOOKING QUESTION  (custom questions on the booking form)
+// ============================================================
+
+model BookingQuestion {
+  id           String  @id @default(uuid())
+  bookingId    String  @map("booking_id")
+  questionText String  @map("question_text")
+  sortOrder    Int     @default(0) @map("sort_order")
+  isRequired   Boolean @default(false) @map("is_required")
+
+  // Relations
+  booking Booking         @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  answer  BookingAnswer?
+
+  @@map("booking_questions")
+}
+
+// ============================================================
+// BOOKING ANSWER
+// ============================================================
+
+model BookingAnswer {
+  id         String @id @default(uuid())
+  questionId String @unique @map("question_id") // one answer per question
+  answerText String @map("answer_text")
+
+  // Relations
+  question BookingQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@map("booking_answers")
+}
