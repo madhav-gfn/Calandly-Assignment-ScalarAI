@@ -8,6 +8,7 @@ import eventTypeRoutes from './routes/eventType.routes.js';
 import availabilityRoutes from './routes/availability.routes.js';
 import bookingRoutes from './routes/booking.routes.js';
 import meetingRoutes from './routes/meeting.routes.js';
+import meRoutes from './routes/me.routes.js';
 
 // ── Express App ────────────────────────────────────────────────
 const app = express();
@@ -21,6 +22,7 @@ app.use(express.json());
 
 // ── Routes ─────────────────────────────────────────────────────
 app.use('/api/health', healthRoutes);
+app.use('/api/me', meRoutes);
 app.use('/api/event-types', eventTypeRoutes);
 app.use('/api/availability', availabilityRoutes);
 app.use('/api/booking', bookingRoutes);

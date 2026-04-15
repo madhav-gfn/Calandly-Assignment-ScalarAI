@@ -12,7 +12,7 @@ export async function getOne(req, res) {
 }
 
 export async function cancel(req, res) {
-  const meeting = await meetingService.cancelMeeting(req.userId, req.params.id);
+  const meeting = await meetingService.cancelMeeting(req.userId, req.params.id, req.body.reason);
   res.json({ success: true, data: meeting });
 }
 

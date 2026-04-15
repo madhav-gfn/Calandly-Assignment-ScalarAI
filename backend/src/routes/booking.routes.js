@@ -3,15 +3,14 @@ import * as bookingController from '../controllers/booking.controller.js';
 
 const router = Router();
 
-// All booking routes are PUBLIC — no auth required
+// Preferred username-aware public booking routes
+router.get('/:username/:slug/slots', bookingController.getSlots);
+router.post('/:username/:slug/book', bookingController.book);
+router.get('/:username/:slug', bookingController.getEventInfo);
 
-// Event type info for the booking page header
-router.get('/:slug', bookingController.getEventInfo);
-
-// Available time slots for a date
+// Legacy slug-only routes retained for compatibility
 router.get('/:slug/slots', bookingController.getSlots);
-
-// Create a booking
 router.post('/:slug/book', bookingController.book);
+router.get('/:slug', bookingController.getEventInfo);
 
 export default router;

@@ -1,38 +1,304 @@
-# Schema Assumptions & Notable Design Decisions
+# Calendly Clone — Scheduling Platform
 
-This document outlines the architectural choices and assumptions made within the database schema, specifically regarding users, events, availability, and booking logic.
+A full-stack scheduling/booking web application that replicates Calendly's core functionality. Users can create event types, configure their availability, and let others book time slots through a public booking page.
 
-## User & Auth
-* **Single User Default:** A single default user is assumed logged in on the admin side (per assignment spec), but the schema supports multiple users fully.
-* **Timezone Management:** The `timezone` attribute lives on the `User` model, not on the `AvailabilitySchedule`. All schedules for a user share their timezone. If per-schedule timezones are required in the future, they can be added to `AvailabilitySchedule`.
-* **Authentication:** `passwordHash` is stored directly; no OAuth/SSO support is currently modeled.
+> **SDE Intern Fullstack Assignment — Scalar AI**
 
-## Event Types
-* **Unique Slugs:** The `slug` is unique per user (`@@unique([userId, slug])`), not globally. This allows two different users to both have an `/intro-call` endpoint, while preventing a single user from having duplicate slugs.
-* **Meeting Modes:** `meetingMode` is stored as a plain `String` (e.g., "google_meet", "zoom", "in_person") rather than a foreign key to keep the implementation simple.
-* **Ownership:** Each event type belongs to exactly one user. Shared or team event types are currently out of scope.
+---
 
-## Availability
-* **Day Representation:** `dayOfWeek` is stored as an integer (0 = Sunday, 6 = Saturday) to align with JavaScript's `Date.getDay()` convention.
-* **Time Storage:** `startTime` and `endTime` in rules and overrides are stored as `String` in `"HH:MM"` format. This avoids complexities with Prisma’s PostgreSQL adapter regarding native `Time` types and JS mapping.
-* **Overrides:** The overrides table only stores exceptions rather than every future date. 
-    * A **blocked day** has `isAvailable = false` and `null` time values.
-    * A **special-hours day** has `isAvailable = true` with specific times.
-* **Schedule Linking:** There is no direct link between `AvailabilitySchedule` and `EventType`. One default schedule applies to all event types by default.
+## Tech Stack
 
-## Bookings
-* **Invitee Logic:** `inviteeId` is a nullable foreign key to `User`. Guest invitees (without accounts) are supported via `inviteeName` and `inviteeEmail`, which are required on every booking.
-* **Participant Scale:** There is no separate `BookingParticipant` table. The schema supports exactly one host and one invitee. Multi-invitee group bookings are out of scope.
-* **Conflict Prevention:** Double-booking prevention is handled in the application logic rather than via database constraints. It is recommended to use serializable transactions or advisory locks to prevent overlapping `start_at`/`end_at` insertions.
-* **Fallback Logic:** `meetingMode` on a `Booking` is nullable. The application applies a fallback: `booking.meetingMode ?? eventType.meetingMode`.
-* **Rescheduling:** `rescheduledFromId` is a nullable self-FK that allows tracking the chain of reschedules back to the original booking.
-* **Status Enum:** Uses a Prisma enum: `SCHEDULED`, `CANCELLED`, `COMPLETED`.
+| Layer | Technology |
+|---|---|
+| **Frontend** | React.js (Vite) |
+| **Backend** | Node.js + Express 5 (ES Modules) |
+| **Database** | PostgreSQL |
+| **ORM** | Prisma 7 (with `@prisma/adapter-pg` driver adapter) |
+| **Timezone** | `date-fns` + `date-fns-tz` (all timestamps stored in UTC) |
+| **Email** | Nodemailer (Ethereal test inbox in dev) |
+| **Deployment** | Vercel (frontend) · Render (backend) · Neon (PostgreSQL) |
 
-## Questions & Answers
-* **Booking Specificity:** Questions and answers are tied to a specific `Booking`, not an `EventType`. Question templates are seeded at booking-creation time.
-* **Answer Constraints:** One answer per question is enforced via `@unique` on `BookingAnswer.questionId`. Multi-select answers are currently out of scope.
+---
 
-## General
-* **Identifiers:** All primary keys use UUIDs (`@default(uuid())`) instead of auto-incrementing integers to better support distributed systems and prevent exposing sequential IDs in public URLs.
-* **Naming Conventions:** All tables use `snake_case` in the database (`@@map`) and `camelCase` in Prisma/JavaScript to maintain consistency with industry standards for both layers.
-* **Cascading Deletes:** `onDelete: Cascade` is applied to child relations (e.g., deleting a user removes their event types). However, **Bookings do not cascade-delete** to preserve records for legal or audit purposes; these should be soft-deleted or anonymized instead.
+## Setup Instructions
+
+### Prerequisites
+
+- Node.js ≥ 18
+- PostgreSQL running locally (or a Neon connection string)
+- npm
+
+### Backend
+
+```bash
+cd backend
+npm install
+```
+
+**1. Configure environment variables:**
+
+```bash
+cp .env.example .env
+# Edit .env with your DATABASE_URL and other values
+```
+
+Required `.env` variables:
+
+| Variable | Description | Example |
+|---|---|---|
+| `DATABASE_URL` | PostgreSQL connection string | `postgresql://postgres:password@localhost:5432/calendly_clone` |
+| `PORT` | Server port | `5000` |
+| `DEFAULT_USER_ID` | UUID of the seeded admin user | _(generated after seeding)_ |
+| `FRONTEND_URL` | Frontend origin for CORS | `http://localhost:5173` |
+| `NODE_ENV` | Environment flag | `development` |
+
+> **Note:** If your database password contains special characters (like `@`), URL-encode them. For example, `Ndjain@2023` becomes `Ndjain%402023` in the connection string.
+
+**2. Run migrations and seed:**
+
+```bash
+npx prisma generate
+npx prisma migrate dev --name init
+npx prisma db seed
+```
+
+After seeding completes, copy the admin user's UUID from the output and paste it into `.env` as `DEFAULT_USER_ID`.
+
+**3. Start the dev server:**
+
+```bash
+npm run dev    # nodemon with auto-reload
+npm start      # production
+```
+
+The API will be available at `http://localhost:5000`.
+
+### Frontend
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+---
+
+## API Reference
+
+Base URL: `http://localhost:5000/api`
+
+### Health
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/health` | Server status, uptime, timestamp |
+
+### Event Types (Admin)
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/event-types` | List all event types |
+| `GET` | `/event-types/:id` | Get single event type |
+| `POST` | `/event-types` | Create event type |
+| `PUT` | `/event-types/:id` | Update event type |
+| `DELETE` | `/event-types/:id` | Soft-delete (sets `isActive = false`) |
+
+### Availability (Admin)
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/availability/schedules` | List all schedules with rules and overrides |
+| `GET` | `/availability/schedules/:id` | Get schedule details |
+| `POST` | `/availability/schedules` | Create schedule |
+| `PUT` | `/availability/schedules/:id` | Update schedule |
+| `DELETE` | `/availability/schedules/:id` | Delete schedule (cascades rules + overrides) |
+| `PUT` | `/availability/schedules/:id/rules` | Bulk replace weekly rules |
+| `GET` | `/availability/schedules/:id/overrides` | List date overrides |
+| `POST` | `/availability/schedules/:id/overrides` | Create date override |
+| `DELETE` | `/availability/overrides/:id` | Delete override |
+
+### Public Booking (No Auth)
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/booking/:slug` | Event type info for booking page |
+| `GET` | `/booking/:slug/slots?date=YYYY-MM-DD&timezone=TZ` | Available time slots |
+| `POST` | `/booking/:slug/book` | Create a booking |
+
+### Meetings (Admin)
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/meetings?status=upcoming\|past\|cancelled` | List meetings with filter |
+| `GET` | `/meetings/:id` | Meeting details with Q&A |
+| `PATCH` | `/meetings/:id/cancel` | Cancel a meeting |
+| `POST` | `/meetings/:id/reschedule` | Reschedule (creates new booking, cancels original) |
+
+---
+
+## Backend Architecture
+
+```
+src/
+├── index.js                    Express entry point
+├── config/env.js               Environment variable validation
+├── middleware/
+│   ├── errorHandler.js         Global error → consistent JSON responses
+│   ├── attachUser.js           Reads DEFAULT_USER_ID → req.userId
+│   └── validate.js             Schema-based request body validation
+├── routes/                     HTTP method + path definitions
+├── controllers/                Request/response handling (thin layer)
+├── services/
+│   ├── slotEngine.js           ★ Core scheduling algorithm
+│   ├── booking.service.js      Double-booking prevention with transactions
+│   ├── meeting.service.js      Cancel + reschedule logic
+│   ├── eventType.service.js    CRUD with slug uniqueness
+│   ├── availability.service.js Schedule/rule/override management
+│   └── email.service.js        Nodemailer + Ethereal
+└── utils/
+    ├── ApiError.js             Custom error class with HTTP status codes
+    ├── dateHelpers.js          Timezone conversion, interval overlap math
+    └── slugify.js              Slug generation + validation
+```
+
+The layered architecture (`Route → Controller → Service → Prisma`) keeps business logic isolated and testable. The scheduling algorithm lives in a dedicated `slotEngine.js` file.
+
+---
+
+## Core Algorithm: Slot Engine
+
+The slot engine (`src/services/slotEngine.js`) computes available time slots in 9 steps:
+
+1. **Resolve Event Type** — Find by slug, get duration and buffer times
+2. **Resolve Default Schedule** — Find the host's default `AvailabilitySchedule`
+3. **Determine Working Window** — Check overrides first (blocked day? special hours?), then fall back to weekly rules
+4. **Convert to UTC** — Working window times in host's timezone → UTC
+5. **Fetch Existing Bookings** — All `SCHEDULED` bookings that overlap the window
+6. **Expand with Buffers** — Each booking's interval is expanded by `bufferBeforeMin` / `bufferAfterMin`
+7. **Generate Candidate Slots** — Walk the window in increments of the event duration
+8. **Filter Conflicts** — Discard any candidate that overlaps an expanded booking
+9. **Convert to Invitee Timezone** — Return both UTC (for POST) and local display strings
+
+### Double-Booking Prevention
+
+Bookings are created inside a Prisma interactive transaction (`$transaction`). The transaction re-checks for conflicts atomically before inserting, preventing race conditions where two invitees try to book the same slot simultaneously. Conflict returns HTTP `409`.
+
+---
+
+## Database Schema
+
+**8 models** across 3 domains:
+
+```
+Users ─────────────── EventTypes
+  │                       │
+  ├── AvailabilitySchedules    │
+  │     ├── AvailabilityRules  │
+  │     └── AvailabilityOverrides
+  │                       │
+  └── Bookings ───────────┘
+        ├── BookingQuestions
+        └── BookingAnswers
+```
+
+### Schema Assumptions & Design Decisions
+
+#### User & Auth
+- **Single User Default:** A single default user is assumed logged in on the admin side (per assignment spec). The admin user's UUID is read from `DEFAULT_USER_ID` in `.env`. The schema fully supports multiple users for future auth.
+- **Timezone on User, not Schedule:** All schedules for a user share their `timezone` field. This simplifies the slot engine and matches Calendly's behavior.
+- **No Auth Yet:** Authentication is not implemented. A hardcoded user ID is used. JWT-based auth can be added by swapping the `attachUser.js` middleware.
+
+#### Event Types
+- **Per-User Slug Uniqueness:** `slug` is unique per user via `@@unique([userId, slug])`, not globally. Two users can both have `/intro-call`.
+- **Soft Delete:** `DELETE` sets `isActive = false` rather than removing the row, because existing bookings reference the event type.
+- **Meeting Modes as Strings:** `meetingMode` is a plain string (`"google_meet"`, `"zoom"`, `"in_person"`, `"phone"`) for simplicity.
+
+#### Availability
+- **Day Representation:** `dayOfWeek` is an integer (0 = Sunday, 6 = Saturday), matching JavaScript's `Date.getDay()`.
+- **Floating Time Strings:** `startTime`/`endTime` are stored as `"HH:MM"` strings. This avoids Prisma/Postgres `Time` type complexities and makes timezone conversion straightforward.
+- **Overrides are Exceptions Only:** The overrides table only stores exceptions. A blocked day has `isAvailable = false` with null times. A special-hours day has `isAvailable = true` with specific times.
+- **No Schedule ↔ EventType Link:** One default schedule applies to all event types.
+- **Bulk Rule Replacement:** When saving weekly hours, the backend deletes all existing rules and inserts the new set in a single transaction (mirrors Calendly's "edit whole week, hit Save" UX).
+
+#### Bookings
+- **Guest Invitees Supported:** `inviteeId` is nullable. Guests (no account) are supported via required `inviteeName` + `inviteeEmail` fields.
+- **1:1 Only:** One host, one invitee per booking. No group bookings.
+- **Application-Level Conflict Prevention:** Double-booking is prevented via Prisma interactive transactions, not database constraints.
+- **Meeting Mode Fallback:** `booking.meetingMode ?? eventType.meetingMode` — the booking's mode overrides the event type's default if set.
+- **Reschedule Chain:** `rescheduledFromId` is a self-referencing FK that tracks the full chain (Original → Reschedule 1 → Reschedule 2 → ...).
+- **Bookings Don't Cascade-Delete:** Preserves records for audit/legal purposes. Use soft-delete (status = `CANCELLED`).
+
+#### Questions & Answers
+- **Per-Booking, Not Per-EventType:** Questions are attached to individual bookings at creation time. This was a conscious trade-off for simplicity.
+- **One Answer Per Question:** Enforced via `@unique` on `BookingAnswer.questionId`. No multi-select.
+
+#### General
+- **UUIDs Everywhere:** All primary keys use `@default(uuid())` — no sequential IDs exposed in URLs.
+- **`snake_case` in DB, `camelCase` in JS:** All tables use `@@map("snake_case")` while Prisma models use `camelCase`.
+- **Cascade Deletes on Children:** Deleting a user cascades to event types, schedules, rules, overrides. Bookings are explicitly excluded from cascading.
+
+---
+
+## Email Notifications (Bonus)
+
+Emails are sent via Nodemailer on:
+- **Booking confirmation** — styled HTML email to the invitee
+- **Meeting cancellation** — cancellation notice to the invitee
+
+In development, the system auto-creates an [Ethereal](https://ethereal.email) test account. All emails are caught in a fake inbox — the preview URL is logged to the console. Email failures are **non-blocking** and will never break the booking flow.
+
+---
+
+## Sample Data (Seed)
+
+Running `npx prisma db seed` populates:
+
+| Model | Seed Data |
+|---|---|
+| **Users** | Admin User (`admin@calendlyclone.com`) + Jane Doe (`jane@example.com`) |
+| **Event Types** | "15 Min Chat" (Google Meet) + "60 Min Deep Dive" (Zoom) |
+| **Availability** | Working Hours schedule (Mon–Fri, 09:00–17:00 ET) |
+| **Override** | May 5, 2026 blocked (Out of Office) |
+| **Booking** | Jane booked a 15-min chat on May 6, 2026 |
+| **Q&A** | "What would you like to discuss?" → "Q3 product roadmap" |
+
+The seed script is idempotent — safe to run multiple times without creating duplicates.
+
+---
+
+## Response Format
+
+All API responses follow a consistent structure:
+
+**Success:**
+```json
+{
+  "success": true,
+  "data": { ... }
+}
+```
+
+**Error:**
+```json
+{
+  "success": false,
+  "error": {
+    "code": 409,
+    "message": "This time slot is no longer available.",
+    "details": null
+  }
+}
+```
+
+---
+
+## Scripts
+
+| Command | Description |
+|---|---|
+| `npm run dev` | Start dev server with nodemon |
+| `npm start` | Start production server |
+| `npm run seed` | Seed the database |
+| `npx prisma generate` | Regenerate Prisma client |
+| `npx prisma migrate dev` | Create + apply migration |
+| `npx prisma studio` | Open Prisma Studio (DB GUI) |

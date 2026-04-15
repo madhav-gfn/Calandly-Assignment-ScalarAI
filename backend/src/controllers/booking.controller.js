@@ -2,16 +2,27 @@ import { getAvailableSlots } from '../services/slotEngine.js';
 import * as bookingService from '../services/booking.service.js';
 import ApiError from '../utils/ApiError.js';
 
+function getPublicLookup(params) {
+  if (params.username) {
+    return {
+      username: params.username,
+      slug: params.slug,
+    };
+  }
+
+  return { slug: params.slug };
+}
+
 /**
- * GET /api/booking/:slug — Public event type info for booking page.
+ * GET /api/booking/:slug or /api/booking/:username/:slug
  */
 export async function getEventInfo(req, res) {
-  const eventType = await bookingService.getPublicEventType(req.params.slug);
+  const eventType = await bookingService.getPublicEventType(getPublicLookup(req.params));
   res.json({ success: true, data: eventType });
 }
 
 /**
- * GET /api/booking/:slug/slots?date=YYYY-MM-DD&timezone=TZ
+ * GET /api/booking/:slug/slots or /api/booking/:username/:slug/slots
  * Returns available time slots for a given date.
  */
 export async function getSlots(req, res) {
@@ -30,7 +41,7 @@ export async function getSlots(req, res) {
     throw ApiError.badRequest('Invalid date format. Use YYYY-MM-DD.');
   }
 
-  const result = await getAvailableSlots(req.params.slug, date, timezone);
+  const result = await getAvailableSlots(getPublicLookup(req.params), date, timezone);
 
   if (!result.eventType) {
     throw ApiError.notFound('Event type not found.');
@@ -45,6 +56,7 @@ export async function getSlots(req, res) {
         title: result.eventType.title,
         durationMinutes: result.eventType.durationMinutes,
         slug: result.eventType.slug,
+        username: result.eventType.user.username,
       },
       slots: result.slots,
     },
@@ -52,7 +64,7 @@ export async function getSlots(req, res) {
 }
 
 /**
- * POST /api/booking/:slug/book — Create a new booking.
+ * POST /api/booking/:slug/book or /api/booking/:username/:slug/book
  */
 export async function book(req, res) {
   const { inviteeName, inviteeEmail, startUtc, endUtc } = req.body;
@@ -63,7 +75,7 @@ export async function book(req, res) {
     );
   }
 
-  const booking = await bookingService.createBooking(req.params.slug, req.body);
+  const booking = await bookingService.createBooking(getPublicLookup(req.params), req.body);
 
   res.status(201).json({ success: true, data: booking });
 }

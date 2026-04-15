@@ -33,6 +33,7 @@ export async function listMeetings(userId, status) {
     where,
     include: {
       eventType: { select: { title: true, slug: true, durationMinutes: true } },
+      host: { select: { id: true, name: true, email: true, timezone: true, username: true } },
       questions: { include: { answer: true } },
     },
     orderBy: { startAt: 'asc' },
@@ -47,7 +48,7 @@ export async function getMeeting(userId, meetingId) {
     where: { id: meetingId },
     include: {
       eventType: true,
-      host: { select: { id: true, name: true, email: true, timezone: true } },
+      host: { select: { id: true, name: true, email: true, timezone: true, username: true } },
       invitee: { select: { id: true, name: true, email: true } },
       questions: { include: { answer: true } },
       rescheduledFrom: { select: { id: true, startAt: true, endAt: true } },
@@ -65,7 +66,7 @@ export async function getMeeting(userId, meetingId) {
 /**
  * Cancel a meeting.
  */
-export async function cancelMeeting(userId, meetingId) {
+export async function cancelMeeting(userId, meetingId, reason) {
   const meeting = await prisma.booking.findUnique({
     where: { id: meetingId },
   });
@@ -78,11 +79,15 @@ export async function cancelMeeting(userId, meetingId) {
     throw ApiError.badRequest('Meeting is already cancelled.');
   }
 
+  const normalizedReason =
+    typeof reason === 'string' && reason.trim().length > 0 ? reason.trim() : null;
+
   const cancelled = await prisma.booking.update({
     where: { id: meetingId },
     data: {
       status: 'CANCELLED',
       cancelledAt: new Date(),
+      cancellationReason: normalizedReason,
     },
     include: {
       eventType: { select: { title: true } },

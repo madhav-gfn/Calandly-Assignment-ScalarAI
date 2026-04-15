@@ -3,15 +3,16 @@ import ApiError from '../utils/ApiError.js';
 import { intervalsOverlap } from '../utils/dateHelpers.js';
 import { addMinutes } from 'date-fns';
 import { sendBookingConfirmation } from './email.service.js';
+import { buildEventTypeLookupWhere } from '../utils/publicLookup.js';
 
 /**
  * Create a booking with double-booking prevention.
  * Uses a Prisma interactive transaction for atomicity.
  */
-export async function createBooking(slug, data) {
+export async function createBooking(publicLookup, data) {
   // Resolve event type
   const eventType = await prisma.eventType.findFirst({
-    where: { slug, isActive: true },
+    where: buildEventTypeLookupWhere(publicLookup),
   });
 
   if (!eventType) {
@@ -92,7 +93,7 @@ export async function createBooking(slug, data) {
       where: { id: booking.id },
       include: {
         eventType: true,
-        host: { select: { id: true, name: true, email: true, timezone: true } },
+        host: { select: { id: true, name: true, email: true, timezone: true, username: true } },
         questions: { include: { answer: true } },
       },
     });
@@ -107,11 +108,11 @@ export async function createBooking(slug, data) {
 /**
  * Get event type info for the public booking page header.
  */
-export async function getPublicEventType(slug) {
+export async function getPublicEventType(publicLookup) {
   const eventType = await prisma.eventType.findFirst({
-    where: { slug, isActive: true },
+    where: buildEventTypeLookupWhere(publicLookup),
     include: {
-      user: { select: { id: true, name: true, timezone: true } },
+      user: { select: { id: true, name: true, timezone: true, username: true } },
     },
   });
 

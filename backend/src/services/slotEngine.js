@@ -5,22 +5,45 @@ import {
   formatTimeInTimezone,
   intervalsOverlap,
 } from '../utils/dateHelpers.js';
+import { buildEventTypeLookupWhere } from '../utils/publicLookup.js';
+
+function mergeWindows(windows) {
+  if (windows.length === 0) {
+    return [];
+  }
+
+  const sorted = [...windows].sort((a, b) => a.start - b.start);
+  const merged = [sorted[0]];
+
+  for (const window of sorted.slice(1)) {
+    const previous = merged[merged.length - 1];
+
+    if (window.start <= previous.end) {
+      previous.end = new Date(Math.max(previous.end.getTime(), window.end.getTime()));
+      continue;
+    }
+
+    merged.push(window);
+  }
+
+  return merged;
+}
+
+function isSameUtcDate(dateA, dateB) {
+  return (
+    dateA.getUTCFullYear() === dateB.getUTCFullYear() &&
+    dateA.getUTCMonth() === dateB.getUTCMonth() &&
+    dateA.getUTCDate() === dateB.getUTCDate()
+  );
+}
 
 /**
- * ★ Core Scheduling Algorithm
- *
- * Given an event type slug and a requested date, computes the available time
- * slots by comparing the host's availability schedule against existing bookings.
- *
- * @param {string} slug        — Event type URL slug
- * @param {string} dateStr     — Requested date in "YYYY-MM-DD" format
- * @param {string} inviteeTz   — Invitee's timezone (e.g. "Asia/Kolkata")
- * @returns {Array<{ startTime, endTime, startUtc, endUtc }>}
+ * Core scheduling algorithm.
+ * Supports multiple weekly windows per day while keeping date overrides single-window.
  */
-export async function getAvailableSlots(slug, dateStr, inviteeTz) {
-  // ── Step 1: Resolve the Event Type ───────────────────────────
+export async function getAvailableSlots(publicLookup, dateStr, inviteeTz) {
   const eventType = await prisma.eventType.findFirst({
-    where: { slug, isActive: true },
+    where: buildEventTypeLookupWhere(publicLookup),
     include: { user: true },
   });
 
@@ -34,12 +57,15 @@ export async function getAvailableSlots(slug, dateStr, inviteeTz) {
   const bufferBefore = eventType.bufferBeforeMin;
   const bufferAfter = eventType.bufferAfterMin;
 
-  // ── Step 2: Resolve the Host's Default Schedule ──────────────
   const schedule = await prisma.availabilitySchedule.findFirst({
     where: { userId: host.id, isDefault: true },
     include: {
-      rules: true,
-      overrides: true,
+      rules: {
+        orderBy: [{ dayOfWeek: 'asc' }, { startTime: 'asc' }],
+      },
+      overrides: {
+        orderBy: { overrideDate: 'asc' },
+      },
     },
   });
 
@@ -47,86 +73,88 @@ export async function getAvailableSlots(slug, dateStr, inviteeTz) {
     return { eventType, slots: [] };
   }
 
-  // ── Step 3: Determine Working Window for the Date ────────────
   const requestedDate = new Date(`${dateStr}T00:00:00`);
-  const dayOfWeek = requestedDate.getDay(); // 0 = Sunday
+  const dayOfWeek = requestedDate.getDay();
+  const dateOnly = new Date(`${dateStr}T00:00:00.000Z`);
 
-  // Check overrides first (date-specific exceptions)
-  const dateOnly = new Date(dateStr + 'T00:00:00.000Z');
-  const override = schedule.overrides.find((o) => {
-    const overrideDate = new Date(o.overrideDate);
-    return (
-      overrideDate.getUTCFullYear() === dateOnly.getUTCFullYear() &&
-      overrideDate.getUTCMonth() === dateOnly.getUTCMonth() &&
-      overrideDate.getUTCDate() === dateOnly.getUTCDate()
-    );
-  });
+  const override = schedule.overrides.find((entry) =>
+    isSameUtcDate(new Date(entry.overrideDate), dateOnly)
+  );
 
-  let windowStart, windowEnd;
+  let availabilityWindows = [];
 
   if (override) {
-    if (!override.isAvailable) {
-      // Day is blocked
+    if (!override.isAvailable || !override.startTime || !override.endTime) {
       return { eventType, slots: [] };
     }
-    // Use override times
-    windowStart = buildUtcFromLocalTime(dateStr, override.startTime, hostTz);
-    windowEnd = buildUtcFromLocalTime(dateStr, override.endTime, hostTz);
+
+    availabilityWindows = [
+      {
+        start: buildUtcFromLocalTime(dateStr, override.startTime, hostTz),
+        end: buildUtcFromLocalTime(dateStr, override.endTime, hostTz),
+      },
+    ];
   } else {
-    // Fall back to weekly rules
-    const rulesForDay = schedule.rules.filter((r) => r.dayOfWeek === dayOfWeek);
+    const rulesForDay = schedule.rules.filter((rule) => rule.dayOfWeek === dayOfWeek);
 
     if (rulesForDay.length === 0) {
-      // Host doesn't work this day
       return { eventType, slots: [] };
     }
 
-    // Use the first rule (simplest case — one window per day)
-    // For multi-window support, you'd loop through all rules
-    windowStart = buildUtcFromLocalTime(dateStr, rulesForDay[0].startTime, hostTz);
-    windowEnd = buildUtcFromLocalTime(dateStr, rulesForDay[0].endTime, hostTz);
+    availabilityWindows = mergeWindows(
+      rulesForDay
+        .map((rule) => ({
+          start: buildUtcFromLocalTime(dateStr, rule.startTime, hostTz),
+          end: buildUtcFromLocalTime(dateStr, rule.endTime, hostTz),
+        }))
+        .filter((window) => window.start < window.end)
+    );
   }
 
-  // ── Step 4: Fetch Existing Bookings ──────────────────────────
+  if (availabilityWindows.length === 0) {
+    return { eventType, slots: [] };
+  }
+
+  const rangeStart = availabilityWindows[0].start;
+  const rangeEnd = availabilityWindows[availabilityWindows.length - 1].end;
+
   const existingBookings = await prisma.booking.findMany({
     where: {
       hostId: host.id,
       status: 'SCHEDULED',
-      startAt: { lt: windowEnd },
-      endAt: { gt: windowStart },
+      startAt: { lt: rangeEnd },
+      endAt: { gt: rangeStart },
     },
   });
 
-  // ── Step 5: Expand Bookings with Buffer Time ─────────────────
-  const blockedIntervals = existingBookings.map((b) => ({
-    start: addMinutes(b.startAt, -bufferBefore),
-    end: addMinutes(b.endAt, bufferAfter),
+  const blockedIntervals = existingBookings.map((booking) => ({
+    start: addMinutes(booking.startAt, -bufferBefore),
+    end: addMinutes(booking.endAt, bufferAfter),
   }));
 
-  // ── Step 6: Generate Candidate Slots ─────────────────────────
   const slots = [];
-  let cursor = new Date(windowStart);
 
-  while (addMinutes(cursor, duration) <= windowEnd) {
-    const candidateEnd = addMinutes(cursor, duration);
+  for (const window of availabilityWindows) {
+    let cursor = new Date(window.start);
 
-    // ── Step 7: Filter Out Conflicts ───────────────────────────
-    const hasConflict = blockedIntervals.some((blocked) =>
-      intervalsOverlap(cursor, candidateEnd, blocked.start, blocked.end)
-    );
+    while (addMinutes(cursor, duration) <= window.end) {
+      const candidateEnd = addMinutes(cursor, duration);
 
-    if (!hasConflict) {
-      // ── Step 8: Convert to Invitee Timezone ──────────────────
-      slots.push({
-        startTime: formatTimeInTimezone(cursor, inviteeTz),
-        endTime: formatTimeInTimezone(candidateEnd, inviteeTz),
-        startUtc: cursor.toISOString(),
-        endUtc: candidateEnd.toISOString(),
-      });
+      const hasConflict = blockedIntervals.some((blocked) =>
+        intervalsOverlap(cursor, candidateEnd, blocked.start, blocked.end)
+      );
+
+      if (!hasConflict) {
+        slots.push({
+          startTime: formatTimeInTimezone(cursor, inviteeTz),
+          endTime: formatTimeInTimezone(candidateEnd, inviteeTz),
+          startUtc: cursor.toISOString(),
+          endUtc: candidateEnd.toISOString(),
+        });
+      }
+
+      cursor = addMinutes(cursor, duration);
     }
-
-    // Move cursor forward by the event duration (step interval)
-    cursor = addMinutes(cursor, duration);
   }
 
   return { eventType, slots };

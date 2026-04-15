@@ -4,7 +4,7 @@
 // Get a free hosted Postgres database in seconds: `npx create-db`
 
 generator client {
-  provider = "prisma-client"
+  provider = "prisma-client-js"
   output   = "../generated/prisma"
 }
 // ============================================================
@@ -24,6 +24,7 @@ model User {
   id           String   @id @default(uuid())
   name         String
   email        String   @unique
+  username     String?  @unique
   passwordHash String   @map("password_hash")
   timezone     String   @default("UTC")
   createdAt    DateTime @default(now()) @map("created_at")
@@ -138,6 +139,7 @@ model Booking {
   meetingLink String?       @map("meeting_link")
   locationDetails String?   @map("location_details")
   cancelledAt DateTime?     @map("cancelled_at")
+  cancellationReason String? @map("cancellation_reason")
   rescheduledFromId String? @map("rescheduled_from_id") // self-FK for reschedule chain
   createdAt   DateTime      @default(now()) @map("created_at")
 

@@ -35,6 +35,18 @@ export function formatTimeInTimezone(utcDate, timezone) {
 }
 
 /**
+ * Validate an IANA timezone string.
+ */
+export function isValidTimezone(timezone) {
+  try {
+    Intl.DateTimeFormat('en-US', { timeZone: timezone }).format(new Date());
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Check if two intervals overlap.
  * A overlaps B when A.start < B.end AND B.start < A.end
  */
