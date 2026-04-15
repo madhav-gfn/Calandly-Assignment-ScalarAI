@@ -6,6 +6,8 @@ import errorHandler from './middleware/errorHandler.js';
 import healthRoutes from './routes/health.routes.js';
 import eventTypeRoutes from './routes/eventType.routes.js';
 import availabilityRoutes from './routes/availability.routes.js';
+import bookingRoutes from './routes/booking.routes.js';
+import meetingRoutes from './routes/meeting.routes.js';
 
 // ── Express App ────────────────────────────────────────────────
 const app = express();
@@ -21,6 +23,8 @@ app.use(express.json());
 app.use('/api/health', healthRoutes);
 app.use('/api/event-types', eventTypeRoutes);
 app.use('/api/availability', availabilityRoutes);
+app.use('/api/booking', bookingRoutes);
+app.use('/api/meetings', meetingRoutes);
 
 // ── Global Error Handler (must be last) ────────────────────────
 app.use(errorHandler);

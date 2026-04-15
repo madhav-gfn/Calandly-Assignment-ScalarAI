@@ -1,5 +1,6 @@
 import prisma from '../../prisma/prismaClient.js';
 import ApiError from '../utils/ApiError.js';
+import { sendCancellationEmail } from './email.service.js';
 
 /**
  * List meetings for the host.
@@ -77,7 +78,7 @@ export async function cancelMeeting(userId, meetingId) {
     throw ApiError.badRequest('Meeting is already cancelled.');
   }
 
-  return prisma.booking.update({
+  const cancelled = await prisma.booking.update({
     where: { id: meetingId },
     data: {
       status: 'CANCELLED',
@@ -87,6 +88,11 @@ export async function cancelMeeting(userId, meetingId) {
       eventType: { select: { title: true } },
     },
   });
+
+  // Send cancellation email (non-blocking)
+  sendCancellationEmail(cancelled).catch(() => {});
+
+  return cancelled;
 }
 
 /**

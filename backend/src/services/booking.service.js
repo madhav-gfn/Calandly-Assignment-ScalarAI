@@ -2,6 +2,7 @@ import prisma from '../../prisma/prismaClient.js';
 import ApiError from '../utils/ApiError.js';
 import { intervalsOverlap } from '../utils/dateHelpers.js';
 import { addMinutes } from 'date-fns';
+import { sendBookingConfirmation } from './email.service.js';
 
 /**
  * Create a booking with double-booking prevention.
@@ -87,7 +88,7 @@ export async function createBooking(slug, data) {
     }
 
     // Return booking with relations
-    return tx.booking.findUnique({
+    const fullBooking = await tx.booking.findUnique({
       where: { id: booking.id },
       include: {
         eventType: true,
@@ -95,6 +96,11 @@ export async function createBooking(slug, data) {
         questions: { include: { answer: true } },
       },
     });
+
+    // Send confirmation email (non-blocking, outside transaction)
+    sendBookingConfirmation(fullBooking).catch(() => {});
+
+    return fullBooking;
   });
 }
 
