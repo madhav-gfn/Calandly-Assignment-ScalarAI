@@ -65,6 +65,7 @@ async function main() {
       timezone: 'America/New_York',
     },
     create: {
+      id: '4f8f6322-ed81-40ed-99ae-534f0eb5c513',
       name: 'Madhav Mishra',
       email: 'admin@calendlyclone.com',
       username: 'madhav-mishra',
