@@ -22,6 +22,62 @@ export async function getEventInfo(req, res) {
 }
 
 /**
+ * GET /api/booking/:slug/month-slots or /api/booking/:username/:slug/month-slots
+ * Returns available slots for entire month.
+ */
+export async function getMonthSlots(req, res) {
+  const { month, timezone } = req.query;
+
+  if (!month) {
+    throw ApiError.badRequest('Query parameter "month" is required (YYYY-MM).');
+  }
+
+  if (!timezone) {
+    throw ApiError.badRequest('Query parameter "timezone" is required (e.g. Asia/Kolkata).');
+  }
+
+  if (!/^\d{4}-\d{2}$/.test(month)) {
+    throw ApiError.badRequest('Invalid month format. Use YYYY-MM.');
+  }
+
+  const [year, monthNum] = month.split('-').map(Number);
+  const daysInMonth = new Date(year, monthNum, 0).getDate();
+  const dates = Array.from({ length: daysInMonth }, (_, i) => {
+    const day = String(i + 1).padStart(2, '0');
+    return `${year}-${String(monthNum).padStart(2, '0')}-${day}`;
+  });
+
+  const result = await Promise.all(
+    dates.map((date) => getAvailableSlots(getPublicLookup(req.params), date, timezone))
+  );
+
+  const eventType = result[0]?.eventType;
+  if (!eventType) {
+    throw ApiError.notFound('Event type not found.');
+  }
+
+  const slotsByDate = {};
+  dates.forEach((date, i) => {
+    slotsByDate[date] = result[i].slots;
+  });
+
+  res.json({
+    success: true,
+    data: {
+      month,
+      timezone,
+      eventType: {
+        title: eventType.title,
+        durationMinutes: eventType.durationMinutes,
+        slug: eventType.slug,
+        username: eventType.user.username,
+      },
+      slotsByDate,
+    },
+  });
+}
+
+/**
  * GET /api/booking/:slug/slots or /api/booking/:username/:slug/slots
  * Returns available time slots for a given date.
  */

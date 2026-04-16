@@ -136,6 +136,24 @@ Base URL: `http://localhost:5000/api`
 
 ---
 
+## Frontend Architecture & Assumptions
+
+The frontend is a strictly designed Vite React SPA focused on achieving a pixel-perfect replica of the Calendly interface.
+
+### Tech Choices & Styling Strategy
+- **Hybrid CSS Architecture:** Uses standard **Tailwind CSS** layout mechanisms alongside custom imported native tokens (`copy.css`). Native classes override specific tokens ensuring identical shadow rendering, focus states, and the `Proxima Nova` font stack without extensive Tailwind configuration bloat.
+- **Iconography:** Incorporates `lucide-react` dynamically to replace previously static unicode characters, bringing high-fidelity, resizable SVG visuals exactly mirroring original Calendly elements (such as angled Link icons, Plus symbols, and layout grids).
+- **State & Data Fetching:** React Query (`@tanstack/react-query`) is deeply integrated into `App.jsx` handling all data fetching, invalidation strategies, and optimistic updates for interactions like scheduling event copies or toggling status states.
+- **Routing:** Powered by `react-router-dom` mapping cleanly into respective dashboard modules (`/app/scheduling`, `/app/meetings`).
+
+### Frontend Design Assumptions
+- **List-View Prioritization:** The Event Types display (under "Scheduling") was specifically configured as a horizontal 1-column list rather than the standard block grid based on priority specifications.
+- **Unimplemented Shell Modules:** Surfaces like 'Workflows', 'Contacts', 'Routing', and 'Analytics' are assumed out-of-scope for the primary milestone, built purely as visual placeholder buttons inside the `AdminShell` to fulfill structural accuracy.
+- **No-Auth Assumption:** The frontend relies on a mock or seeded `DEFAULT_USER_ID` wrapper around the requests rather than executing real JWT or session-based authentication sequences.
+- **Static Base64 Fonts:** The `Proxima Nova` typography directly loads from base64 blocks inside `copy.css` implicitly bypassing CSP restrictions during deployment phases.
+
+---
+
 ## Backend Architecture
 
 ```

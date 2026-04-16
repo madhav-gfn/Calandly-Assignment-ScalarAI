@@ -1,6 +1,7 @@
 import prisma from '../../prisma/prismaClient.js';
 import ApiError from '../utils/ApiError.js';
-import { sendCancellationEmail } from './email.service.js';
+import { sendCancellationEmail, sendRescheduleEmail } from './email.service.js';
+import logger from '../utils/logger.js';
 
 /**
  * List meetings for the host.
@@ -95,7 +96,12 @@ export async function cancelMeeting(userId, meetingId, reason) {
   });
 
   // Send cancellation email (non-blocking)
-  sendCancellationEmail(cancelled).catch(() => {});
+  sendCancellationEmail(cancelled).catch((err) => {
+    logger.error('Failed to send cancellation email', {
+      meetingId,
+      error: err.message,
+    });
+  });
 
   return cancelled;
 }
@@ -127,7 +133,7 @@ export async function rescheduleMeeting(userId, meetingId, data) {
   }
 
   // Transaction: check conflicts, create new booking, cancel old one
-  return prisma.$transaction(async (tx) => {
+  const result = await prisma.$transaction(async (tx) => {
     // Check for conflicts at the new time
     const conflict = await tx.booking.findFirst({
       where: {
@@ -172,8 +178,20 @@ export async function rescheduleMeeting(userId, meetingId, data) {
       where: { id: newBooking.id },
       include: {
         eventType: { select: { title: true, slug: true, durationMinutes: true } },
+        host: { select: { id: true, name: true, email: true } },
         rescheduledFrom: { select: { id: true, startAt: true, endAt: true } },
       },
     });
   });
+
+  // Send reschedule email (non-blocking)
+  sendRescheduleEmail(result, original).catch((err) => {
+    logger.error('Failed to send reschedule email', {
+      newBookingId: result.id,
+      originalBookingId: meetingId,
+      error: err.message,
+    });
+  });
+
+  return result;
 }

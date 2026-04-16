@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { eachDayOfInterval, endOfMonth, format, startOfMonth, startOfToday } from 'date-fns';
+import { format } from 'date-fns';
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL || 'http://localhost:5000/api',
@@ -122,21 +122,11 @@ export async function createPublicBooking(username, slug, payload) {
 }
 
 export async function getMonthAvailability(username, slug, month, timezone) {
-  const monthStart = startOfMonth(month);
-  const monthEnd = endOfMonth(month);
-  const today = startOfToday();
-
-  const dates = eachDayOfInterval({ start: monthStart, end: monthEnd }).filter(
-    (date) => date >= today
-  );
-
-  const results = await Promise.all(
-    dates.map(async (date) => {
-      const dateKey = format(date, 'yyyy-MM-dd');
-      const data = await getPublicSlots(username, slug, dateKey, timezone);
-      return [dateKey, data.slots];
+  const monthKey = format(month, 'yyyy-MM');
+  const data = await api
+    .get(`/booking/${username}/${slug}/month-slots`, {
+      params: { month: monthKey, timezone },
     })
-  );
-
-  return Object.fromEntries(results);
+    .then(unwrap);
+  return data.slotsByDate;
 }

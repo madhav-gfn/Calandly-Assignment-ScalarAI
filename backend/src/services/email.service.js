@@ -1,5 +1,6 @@
 import nodemailer from 'nodemailer';
 import env from '../config/env.js';
+import logger from '../utils/logger.js';
 
 let transporter = null;
 
@@ -91,10 +92,93 @@ export async function sendBookingConfirmation(booking) {
       console.log(`📧 Email preview: ${previewUrl}`);
     }
 
+    logger.info('Booking confirmation email sent', {
+      bookingId: booking.id,
+      inviteeEmail: booking.inviteeEmail,
+      previewUrl,
+    });
+
     return info;
   } catch (err) {
     // Email failures shouldn't break the booking flow
-    console.error('⚠️  Email send failed (non-blocking):', err.message);
+    logger.error('Email send failed (non-blocking)', {
+      bookingId: booking.id,
+      inviteeEmail: booking.inviteeEmail,
+      error: err.message,
+      stack: err.stack,
+    });
+    return null;
+  }
+}
+
+/**
+ * Send a reschedule notification email to the invitee.
+ */
+export async function sendRescheduleEmail(newBooking, originalBooking) {
+  try {
+    const transport = await getTransporter();
+
+    const info = await transport.sendMail({
+      from: '"Calendly Clone" <noreply@calendlyclone.com>',
+      to: newBooking.inviteeEmail,
+      subject: `Meeting Rescheduled: ${newBooking.eventType?.title || 'Meeting'}`,
+      html: `
+        <div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <div style="background: #F59E0B; color: white; padding: 24px; border-radius: 8px 8px 0 0;">
+            <h1 style="margin: 0; font-size: 20px;">🔄 Meeting Rescheduled</h1>
+          </div>
+          <div style="border: 1px solid #e0e0e0; border-top: none; padding: 24px; border-radius: 0 0 8px 8px;">
+            <p>Hi <strong>${newBooking.inviteeName}</strong>,</p>
+            <p>Your meeting has been rescheduled to a new time.</p>
+            <table style="width: 100%; border-collapse: collapse; margin: 16px 0;">
+              <tr>
+                <td style="padding: 8px 0; color: #666;">Event</td>
+                <td style="padding: 8px 0; font-weight: bold;">${newBooking.eventType?.title || 'Meeting'}</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px 0; color: #666;">Host</td>
+                <td style="padding: 8px 0;">${newBooking.host?.name || 'Host'}</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px 0; color: #666;">Previous Time</td>
+                <td style="padding: 8px 0; text-decoration: line-through; color: #999;">${new Date(originalBooking.startAt).toUTCString()}</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px 0; color: #666;">New Time</td>
+                <td style="padding: 8px 0; font-weight: bold; color: #F59E0B;">${new Date(newBooking.startAt).toUTCString()}</td>
+              </tr>
+              ${newBooking.meetingLink ? `
+              <tr>
+                <td style="padding: 8px 0; color: #666;">Meeting Link</td>
+                <td style="padding: 8px 0;"><a href="${newBooking.meetingLink}">${newBooking.meetingLink}</a></td>
+              </tr>` : ''}
+            </table>
+            <p style="color: #888; font-size: 13px;">This is an automated message from Calendly Clone.</p>
+          </div>
+        </div>
+      `,
+    });
+
+    const previewUrl = nodemailer.getTestMessageUrl(info);
+    if (previewUrl) {
+      console.log(`📧 Email preview: ${previewUrl}`);
+    }
+
+    logger.info('Reschedule email sent', {
+      bookingId: newBooking.id,
+      originalBookingId: originalBooking.id,
+      inviteeEmail: newBooking.inviteeEmail,
+      previewUrl,
+    });
+
+    return info;
+  } catch (err) {
+    logger.error('Reschedule email send failed (non-blocking)', {
+      bookingId: newBooking.id,
+      inviteeEmail: newBooking.inviteeEmail,
+      error: err.message,
+      stack: err.stack,
+    });
     return null;
   }
 }
@@ -139,9 +223,20 @@ export async function sendCancellationEmail(booking) {
       console.log(`📧 Email preview: ${previewUrl}`);
     }
 
+    logger.info('Cancellation email sent', {
+      bookingId: booking.id,
+      inviteeEmail: booking.inviteeEmail,
+      previewUrl,
+    });
+
     return info;
   } catch (err) {
-    console.error('⚠️  Email send failed (non-blocking):', err.message);
+    logger.error('Cancellation email send failed (non-blocking)', {
+      bookingId: booking.id,
+      inviteeEmail: booking.inviteeEmail,
+      error: err.message,
+      stack: err.stack,
+    });
     return null;
   }
 }
