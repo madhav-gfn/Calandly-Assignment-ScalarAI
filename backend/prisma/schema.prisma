@@ -53,6 +53,7 @@ model EventType {
   bufferBeforeMin   Int      @default(0) @map("buffer_before_min")
   bufferAfterMin    Int      @default(0) @map("buffer_after_min")
   isActive          Boolean  @default(true) @map("is_active")
+  isDeleted         Boolean  @default(false) @map("is_deleted")
   createdAt         DateTime @default(now()) @map("created_at")
 
   // Relations

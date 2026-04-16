@@ -6,7 +6,7 @@ import ApiError from '../utils/ApiError.js';
  */
 export async function listEventTypes(userId) {
   return prisma.eventType.findMany({
-    where: { userId },
+    where: { userId, isDeleted: false },
     orderBy: { createdAt: 'desc' },
   });
 }
@@ -19,7 +19,7 @@ export async function getEventType(userId, eventTypeId) {
     where: { id: eventTypeId },
   });
 
-  if (!eventType || eventType.userId !== userId) {
+  if (!eventType || eventType.userId !== userId || eventType.isDeleted) {
     throw ApiError.notFound('Event type not found.');
   }
 
@@ -64,7 +64,7 @@ export async function updateEventType(userId, eventTypeId, data) {
     where: { id: eventTypeId },
   });
 
-  if (!existing || existing.userId !== userId) {
+  if (!existing || existing.userId !== userId || existing.isDeleted) {
     throw ApiError.notFound('Event type not found.');
   }
 
@@ -110,6 +110,6 @@ export async function deleteEventType(userId, eventTypeId) {
 
   return prisma.eventType.update({
     where: { id: eventTypeId },
-    data: { isActive: false },
+    data: { isActive: false, isDeleted: true },
   });
 }

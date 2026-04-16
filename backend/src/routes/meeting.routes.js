@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { z } from 'zod';
 import * as meetingController from '../controllers/meeting.controller.js';
 import attachUser from '../middleware/attachUser.js';
 import { validate } from '../middleware/validate.js';
@@ -8,9 +9,9 @@ const router = Router();
 // All meeting routes require an authenticated user
 router.use(attachUser);
 
-const cancelSchema = {
-  reason: { required: false, type: 'string', max: 500 },
-};
+const cancelSchema = z.object({
+  reason: z.string().max(500).optional(),
+});
 
 router.get('/', meetingController.list);
 router.get('/:id', meetingController.getOne);

@@ -227,7 +227,7 @@ export default function SchedulingPage() {
                 me.username && buildPublicBookingUrl(me.username, eventType.slug);
 
               return (
-                <article key={eventType.id} className="event-card event-card--horizontal" style={{ '--event-accent': accent }}>
+                <article key={eventType.id} className="event-card event-card--horizontal" style={{ '--event-accent': accent, zIndex: menuEventId === eventType.id ? 50 : undefined }}>
                   <div className="event-card__main">
                     <div className="event-card__header">
                       <div>
