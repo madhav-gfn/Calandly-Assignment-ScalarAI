@@ -30,10 +30,14 @@
 .sidebar__brand {
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: space-between;
   height: 52px;
-  margin-bottom: 4px;
-  position: relative;
+  margin-bottom: 12px;
+  padding: 0 8px;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--color-surface);
 }
 
 .sidebar__logo--mark {
@@ -56,10 +60,10 @@
 }
 
 .sidebar__collapse {
-  position: absolute;
-  right: -16px;
+  position: static;
   width: 32px;
   height: 32px;
+  margin-left: auto;
   border: 1px solid var(--color-border);
   border-radius: 999px;
   background: var(--color-surface);
