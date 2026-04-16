@@ -1,26 +1,44 @@
-export default function SidebarIcon({ name }) {
+import {
+  CalendarDays,
+  Clock,
+  Users,
+  Zap,
+  LayoutGrid,
+  ArrowRightLeft,
+  BarChart2,
+  ShieldCheck,
+  Search,
+  Link,
+  ChevronRight
+} from 'lucide-react';
+
+export default function SidebarIcon({ name, ...props }) {
+  const iconProps = { className: "icon-glyph", size: 20, strokeWidth: 1.5, ...props };
+
   switch (name) {
     case 'calendar':
-      return <span className="icon-glyph">▦</span>;
+      return <CalendarDays {...iconProps} />;
     case 'clock':
-      return <span className="icon-glyph">◷</span>;
+      return <Clock {...iconProps} />;
     case 'users':
-      return <span className="icon-glyph">◔</span>;
+      return <Users {...iconProps} />;
     case 'spark':
-      return <span className="icon-glyph">✦</span>;
+      return <Zap {...iconProps} />;
     case 'grid':
-      return <span className="icon-glyph">⊞</span>;
+      return <LayoutGrid {...iconProps} />;
     case 'swap':
-      return <span className="icon-glyph">⇄</span>;
+      return <ArrowRightLeft {...iconProps} />;
     case 'chart':
-      return <span className="icon-glyph">◫</span>;
+      return <BarChart2 {...iconProps} />;
     case 'shield':
-      return <span className="icon-glyph">⬡</span>;
+      return <ShieldCheck {...iconProps} />;
     case 'search':
-      return <span className="icon-glyph">⌕</span>;
+      return <Search {...iconProps} />;
     case 'link':
-      return <span className="icon-glyph">↗</span>;
+      return <Link {...iconProps} />;
+    case 'chevronRight':
+      return <ChevronRight {...iconProps} />;
     default:
-      return <span className="icon-glyph">•</span>;
+      return <span className="icon-glyph w-5 h-5 flex items-center justify-center">•</span>;
   }
 }

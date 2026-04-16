@@ -58,6 +58,7 @@ import SlotPickerPanel from './components/public/SlotPickerPanel.jsx';
 import EventTypeModal from './components/modals/EventTypeModal.jsx';
 import CancelMeetingModal from './components/modals/CancelMeetingModal.jsx';
 import RescheduleModal from './components/modals/RescheduleModal.jsx';
+import { ChevronLeft, ChevronRight, Plus, Link2 } from 'lucide-react';
 import './App.css';
 
 const DAY_ROWS = [
@@ -255,7 +256,7 @@ function AdminShell() {
             onClick={() => setSidebarExpanded((current) => !current)}
             aria-label={sidebarExpanded ? 'Collapse navigation' : 'Expand navigation'}
           >
-            {sidebarExpanded ? '«' : '»'}
+            {sidebarExpanded ? <ChevronLeft size={16} /> : <ChevronRight size={16} />}
           </button>
         </div>
 
@@ -264,7 +265,7 @@ function AdminShell() {
           className="outline-button sidebar__create"
           onClick={() => navigate('/app/scheduling?create=1')}
         >
-          <span className="sidebar__create-plus">+</span>
+          <span className="sidebar__create-plus"><Plus size={16} strokeWidth={3} /></span>
           <span>Create</span>
         </button>
 
@@ -300,7 +301,7 @@ function AdminShell() {
               className="primary-button shell-header__create"
               onClick={() => navigate('/app/scheduling?create=1')}
             >
-              + Create
+              <Plus size={16} strokeWidth={2.5} style={{ marginRight: '4px', display: 'inline' }} /> Create
             </button>
             <button type="button" className="icon-button">
               <SidebarIcon name="users" />
@@ -488,7 +489,7 @@ function SchedulingPage() {
               setModalOpen(true);
             }}
           >
-            + Create
+            <Plus size={16} strokeWidth={2.5} style={{ marginRight: '4px', display: 'inline' }} /> Create
           </button>
         </div>
 
@@ -545,13 +546,43 @@ function SchedulingPage() {
                 me.username && buildPublicBookingUrl(me.username, eventType.slug);
 
               return (
-                <article key={eventType.id} className="event-card" style={{ '--event-accent': accent }}>
-                  <div className="event-card__header">
-                    <div>
-                      <h3>{eventType.title}</h3>
-                      <p>
-                        {eventType.durationMinutes} min • {MEETING_MODE_LABELS[eventType.meetingMode]}
-                      </p>
+                <article key={eventType.id} className="event-card event-card--horizontal" style={{ '--event-accent': accent }}>
+                  <div className="event-card__main">
+                    <div className="event-card__header">
+                      <div>
+                        <h3>{eventType.title}</h3>
+                        <p>
+                          {eventType.durationMinutes} min • {MEETING_MODE_LABELS[eventType.meetingMode]}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="event-card__actions">
+                      <button type="button" className="text-link" style={{ fontWeight: '600' }} onClick={() => handleCopyLink(eventType)}>
+                        <Link2 size={14} style={{ display: 'inline', marginRight: '4px', verticalAlign: 'middle' }} /> 
+                        Copy link
+                      </button>
+                      {publicUrl ? (
+                         <a href={publicUrl} target="_blank" rel="noreferrer" className="text-link">
+                           View booking page
+                         </a>
+                      ) : (
+                         <span className="text-muted text-sm">Set your username to generate links</span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="event-card__side">
+                    <div className="event-card__footer">
+                      <label className="switch">
+                        <input
+                          type="checkbox"
+                          checked={eventType.isActive}
+                          onChange={() => handleToggle(eventType)}
+                        />
+                        <span className="switch__track" />
+                        <span className="sr-only">{eventType.isActive ? 'On' : 'Off'}</span>
+                      </label>
                     </div>
 
                     <div className="event-card__menu">
@@ -566,7 +597,7 @@ function SchedulingPage() {
                       </button>
 
                       {menuEventId === eventType.id ? (
-                        <div className="dropdown-menu">
+                        <div className="dropdown-menu dropdown-menu--right">
                           <button
                             type="button"
                             onClick={() => {
@@ -598,42 +629,6 @@ function SchedulingPage() {
                         </div>
                       ) : null}
                     </div>
-                  </div>
-
-                  <p className="event-card__description">
-                    {eventType.description || 'Uses your default availability schedule and booking preferences.'}
-                  </p>
-
-                  <div className="event-card__pill-row">
-                    <span className="pill">{MEETING_MODE_LABELS[eventType.meetingMode]}</span>
-                    <span className="pill">
-                      Buffers {eventType.bufferBeforeMin}/{eventType.bufferAfterMin}
-                    </span>
-                  </div>
-
-                  <div className="event-card__actions">
-                    <button type="button" className="outline-button" onClick={() => handleCopyLink(eventType)}>
-                      Copy link
-                    </button>
-                    {publicUrl ? (
-                      <a href={publicUrl} target="_blank" rel="noreferrer" className="text-link">
-                        View booking page
-                      </a>
-                    ) : (
-                      <span className="text-muted">Set your username to generate links</span>
-                    )}
-                  </div>
-
-                  <div className="event-card__footer">
-                    <label className="switch">
-                      <input
-                        type="checkbox"
-                        checked={eventType.isActive}
-                        onChange={() => handleToggle(eventType)}
-                      />
-                      <span className="switch__track" />
-                      <span>{eventType.isActive ? 'On' : 'Off'}</span>
-                    </label>
                   </div>
                 </article>
               );
@@ -1021,7 +1016,7 @@ function AvailabilityPage() {
                       )}
 
                       <button type="button" className="text-link" onClick={() => addBlock(day.value)}>
-                        + Add hours
+                        <Plus size={14} style={{ marginRight: '4px', display: 'inline-block' }} /> Add hours
                       </button>
                     </div>
                   </div>
