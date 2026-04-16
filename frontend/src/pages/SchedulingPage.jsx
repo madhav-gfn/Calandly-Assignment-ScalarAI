@@ -192,7 +192,7 @@ export default function SchedulingPage() {
               target="_blank"
               rel="noreferrer"
             >
-              View landing page
+              View booking page
             </a>
           ) : null}
         </div>
